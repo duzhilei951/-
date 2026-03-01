@@ -1,15 +1,11 @@
 # 小远智 - 每日AI模型动态监测脚本
 # 功能：搜索最新AI模型新闻，如有新模型或重大升级则生成报告并推送到GitHub
 
-param(
-    [string]$TavilyApiKey = "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",
-    [string]$RepoPath = "C:\Users\远智教育\.openclaw\workspace\小远智",
-    [string]$GithubRepo = "duzhilei951/-"
-)
-
 $ErrorActionPreference = "Stop"
 $date = Get-Date -Format "yyyy-MM-dd"
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$TavilyApiKey = "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"
+$RepoPath = "C:\Users\远智教育\.openclaw\workspace\小远智"
 
 Write-Host "[$timestamp] 开始执行每日AI模型监测..." -ForegroundColor Green
 
@@ -27,7 +23,6 @@ try {
         max_results = 15
         time_range = "day"
         search_depth = "advanced"
-        include_raw_content = $true
     } | ConvertTo-Json
     
     $response = Invoke-RestMethod -Uri 'https://api.tavily.com/search' -Method POST -Headers $headers -Body $body -TimeoutSec 60
@@ -42,8 +37,8 @@ try {
 $newModels = @()
 $majorUpdates = @()
 
-$keywordsNewModel = @("release", "launch", "new model", "announced", "introducing", " unveiled")
-$keywordsUpdate = @("update", "upgrade", "version", "V2", "V3", "V4", "V5", "2.0", "3.0", "4.0", "5.0")
+$keywordsNewModel = @("release", "launch", "new model", "announced", "introducing")
+$keywordsUpdate = @("update", "upgrade", "version", "V2", "V3", "V4", "V5")
 
 foreach ($result in $response.results) {
     $titleLower = $result.title.ToLower()
@@ -52,8 +47,8 @@ foreach ($result in $response.results) {
     # 检查新模型发布
     foreach ($keyword in $keywordsNewModel) {
         if ($titleLower.Contains($keyword) -or $contentLower.Contains($keyword)) {
-            if ($titleLower -match "(kimi|qwen|deepseek|glm|minimax|doubao|gpt|claude|gemini|llama|mistral)" -or 
-                $contentLower -match "(kimi|qwen|deepseek|glm|minimax|doubao|gpt|claude|gemini|llama|mistral)") {
+            if ($titleLower -match "(kimi|qwen|deepseek|glm|minimax|doubao|gpt|claude|gemini)" -or 
+                $contentLower -match "(kimi|qwen|deepseek|glm|minimax|doubao|gpt|claude|gemini)") {
                 $newModels += $result
                 break
             }
@@ -93,12 +88,10 @@ $reportContent = @"
 
 ---
 
-## 📊 今日概览
+## 今日概览
 
-| 类型 | 数量 |
-|------|------|
-| 🆕 新模型发布 | $($newModels.Count) 条 |
-| ⬆️ 重大升级 | $($majorUpdates.Count) 条 |
+- 新模型发布: $($newModels.Count) 条
+- 重大升级: $($majorUpdates.Count) 条
 
 ---
 
@@ -106,70 +99,35 @@ $reportContent = @"
 
 # 添加新模型部分
 if ($newModels.Count -gt 0) {
-    $reportContent += @"
-## 🆕 新模型发布
-
-"@
+    $reportContent += "## 新模型发布`n`n"
     $index = 1
     foreach ($model in $newModels | Select-Object -First 5) {
-        $reportContent += @"
-### $index. $($model.title)
-
-**来源：** [$($model.url)]($($model.url))  
-**摘要：** $($model.content.Substring(0, [Math]::Min(300, $model.content.Length)))...
-
----
-
-"@
+        $desc = $model.content
+        if ($desc.Length -gt 200) { $desc = $desc.Substring(0, 200) + "..." }
+        $reportContent += "### $index. $($model.title)`n`n"
+        $reportContent += "来源: $($model.url)`n`n"
+        $reportContent += "摘要: $desc`n`n"
+        $reportContent += "---`n`n"
         $index++
     }
 }
 
 # 添加升级部分
 if ($majorUpdates.Count -gt 0) {
-    $reportContent += @"
-## ⬆️ 重大升级动态
-
-"@
+    $reportContent += "## 重大升级动态`n`n"
     $index = 1
     foreach ($update in $majorUpdates | Select-Object -First 5) {
-        $reportContent += @"
-### $index. $($update.title)
-
-**来源：** [$($update.url)]($($update.url))  
-**摘要：** $($update.content.Substring(0, [Math]::Min(300, $update.content.Length)))...
-
----
-
-"@
+        $desc = $update.content
+        if ($desc.Length -gt 200) { $desc = $desc.Substring(0, 200) + "..." }
+        $reportContent += "### $index. $($update.title)`n`n"
+        $reportContent += "来源: $($update.url)`n`n"
+        $reportContent += "摘要: $desc`n`n"
+        $reportContent += "---`n`n"
         $index++
     }
 }
 
-# 添加原始数据附录
-$reportContent += @"
-## 📎 原始搜索结果
-
-共检索到 $($response.results.Count) 条相关新闻：
-
-| 序号 | 标题 | 来源 |
-|------|------|------|
-"@
-
-$index = 1
-foreach ($result in $response.results) {
-    $domain = ([System.Uri]$result.url).Host
-    $reportContent += "| $index | $($result.title) | $domain |`n"
-    $index++
-}
-
-$reportContent += @"
-
----
-
-*本报告由「小远智的报告」技能自动生成，使用 Tavily API 进行多源新闻聚合。*
-*仅在有新模型发布或重大升级时生成。*
-"@
+$reportContent += "*本报告由小远智自动生成*"
 
 # 5. 保存报告
 $reportFileName = "AI模型每日动态_$date.md"
@@ -182,17 +140,15 @@ Write-Host "报告已保存: $reportPath" -ForegroundColor Green
 try {
     Set-Location $RepoPath
     
-    # 配置git用户信息（如果未配置）
     git config user.email "xiaoyuanzhi@auto.report" 2>$null
     git config user.name "小远智" 2>$null
     
-    # 添加、提交、推送
     git add .
     $commitMsg = "每日AI模型动态监测 - $date（发现 $($newModels.Count) 新模型, $($majorUpdates.Count) 升级）"
     git commit -m $commitMsg
     git push origin main
     
-    Write-Host "[$timestamp] ✅ 成功推送到 GitHub: $GithubRepo" -ForegroundColor Green
+    Write-Host "[$timestamp] 成功推送到 GitHub" -ForegroundColor Green
 } catch {
     Write-Error "GitHub推送失败: $_"
     exit 1
